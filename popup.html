@@ -62,6 +62,23 @@
   .empty { color: #888; font-style: italic; padding: 4px 0; }
 
   .tls-note { padding: 0 12px 6px; color: #888; font-size: 11px; }
+
+  #sessionToken:empty { display: none; }
+  .session-box { margin: 0 12px 8px; border: 1px solid #d6cbee; background: #f7f4fd; border-radius: 6px; padding: 7px 9px; }
+  .session-box-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+  .session-box-label { font-size: 10.5px; font-weight: 700; color: #4a3a73; text-transform: uppercase; letter-spacing: 0.3px; }
+  .session-conf { font-size: 9.5px; font-weight: bold; padding: 1px 7px; border-radius: 8px; }
+  .conf-high { background: #d4edda; color: #155724; }
+  .conf-medium { background: #fff3cd; color: #856404; }
+  .conf-low { background: #f0f0f0; color: #666; }
+  .session-box-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .session-name { font-family: Consolas, Menlo, monospace; font-size: 10.5px; background: #ece4fb; padding: 2px 5px; border-radius: 3px; }
+  .session-value { font-family: Consolas, Menlo, monospace; font-size: 10.5px; background: #fff; border: 1px dashed #d6cbee; padding: 2px 5px; border-radius: 3px; word-break: break-all; flex: 1 1 160px; min-width: 0; }
+  .session-copy-btn { font-size: 10px; padding: 3px 7px; border: 1px solid #6a4fae; background: #6a4fae; color: #fff; border-radius: 4px; cursor: pointer; }
+  .session-copy-btn:hover { background: #59408f; }
+  .session-alts { margin-top: 5px; font-size: 10px; color: #665b85; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .session-alt-btn { font-size: 10px; padding: 2px 7px; border: 1px solid #d6cbee; background: #fff; border-radius: 10px; cursor: pointer; }
+  .session-alt-btn:hover { background: #ece4fb; }
 </style>
 </head>
 <body>
@@ -76,6 +93,8 @@
     <button id="scanAll">Scan All Tabs</button>
   </div>
   <div id="status"></div>
+
+  <div id="sessionToken"></div>
 
   <div class="summary" id="summary"></div>
 

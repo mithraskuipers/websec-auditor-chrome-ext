@@ -267,6 +267,98 @@ function mergeCookieFindings(cookies, isHttps) {
 }
 
 // ============================================================
+// Session-token auto-detection — surfaces the most likely session/auth
+// cookie for quick copy during authorized testing (e.g. reuse in a repeater
+// tool or curl), instead of hunting through the full cookie list by hand.
+// ============================================================
+const SESSION_NAME_EXACT = new Set([
+  "sessionid", "session_id", "sid", "connect.sid", "jsessionid", "phpsessid",
+  "asp.net_sessionid", "aspsessionid", "laravel_session", "ci_session", "session",
+  "auth_token", "access_token", "token", "sessid"
+]);
+const NON_SESSION_HINT_RE = /(_ga|_gid|_gat|_fbp|_fbc|consent|cookieconsent|cookie_consent|optanon|cf_bm|cf_clearance|__cf|_hj|_uet|amplitude|mixpanel|utm_|^ab_|experiment|theme|locale|^lang$)/i;
+
+function scoreSessionCandidate(c) {
+  const name = c.name.toLowerCase();
+  let score = 0;
+  if (SESSION_NAME_EXACT.has(name)) score += 50;
+  else if (SESSION_LIKE_RE.test(c.name)) score += 20;
+  if (NON_SESSION_HINT_RE.test(name)) score -= 60;
+  if (c.httpOnly) score += 15; // real session cookies are usually HttpOnly
+  if (c.secure) score += 5;
+  if (c.session) score += 5;  // expires with browser session, typical of auth cookies
+  if (c.value) {
+    if (c.value.length >= 16) score += 10; // long opaque value, not a short flag
+    if (/^(0|1|true|false|none|null)$/i.test(c.value)) score -= 20;
+  }
+  return score;
+}
+
+// Returns the best-scoring candidate plus any other positive-scoring cookies,
+// so the UI can show one primary pick with a couple of fallbacks underneath.
+function detectSessionCookie(cookies) {
+  if (!cookies || !cookies.length) return { best: null, candidates: [] };
+  const scored = cookies
+    .map(c => ({ cookie: c, score: scoreSessionCandidate(c) }))
+    .filter(s => s.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (!scored.length) return { best: null, candidates: [] };
+  return { best: scored[0], candidates: scored };
+}
+
+function confidenceLabel(score) {
+  if (score >= 60) return "high";
+  if (score >= 30) return "medium";
+  return "low";
+}
+
+function renderSessionToken(detection) {
+  const container = document.getElementById("sessionToken");
+  if (!container) return;
+  if (!detection || !detection.best) {
+    container.innerHTML = "";
+    return;
+  }
+  const { cookie, score } = detection.best;
+  const conf = confidenceLabel(score);
+  const alts = detection.candidates.slice(1, 4);
+  container.innerHTML = `
+    <div class="session-box">
+      <div class="session-box-head">
+        <span class="session-box-label">Detected session token</span>
+        <span class="session-conf conf-${conf}">${conf} confidence</span>
+      </div>
+      <div class="session-box-row">
+        <code class="session-name">${escapeHtml(cookie.name)}</code>
+        <code class="session-value">${escapeHtml(cookie.value)}</code>
+        <button class="session-copy-btn" data-copy="${escapeHtml(cookie.value)}">Copy value</button>
+        <button class="session-copy-btn" data-copy="${escapeHtml(`${cookie.name}=${cookie.value}`)}">Copy name=value</button>
+      </div>
+      ${alts.length ? `<div class="session-alts">Other candidate(s): ${alts.map(a =>
+        `<button class="session-alt-btn" data-name="${escapeHtml(a.cookie.name)}" data-value="${escapeHtml(a.cookie.value)}">${escapeHtml(a.cookie.name)}</button>`
+      ).join(" ")}</div>` : ""}
+    </div>`;
+}
+
+document.getElementById("sessionToken").addEventListener("click", async (e) => {
+  const copyBtn = e.target.closest(".session-copy-btn");
+  if (copyBtn) {
+    try {
+      await navigator.clipboard.writeText(copyBtn.dataset.copy);
+      const old = copyBtn.textContent;
+      copyBtn.textContent = "Copied";
+      setTimeout(() => { copyBtn.textContent = old; }, 1200);
+    } catch (err) {}
+    return;
+  }
+  const altBtn = e.target.closest(".session-alt-btn");
+  if (altBtn) {
+    renderSessionToken({ best: { cookie: { name: altBtn.dataset.name, value: altBtn.dataset.value }, score: 50 }, candidates: lastSessionDetection ? lastSessionDetection.candidates : [] });
+  }
+});
+let lastSessionDetection = null;
+
+// ============================================================
 // Page-level DOM checks (runs inside the page)
 // ============================================================
 function collectPageSignals() {
@@ -638,6 +730,8 @@ async function run() {
   document.getElementById("url").textContent = tab.url;
   const btn = document.getElementById("refresh");
   btn.disabled = true;
+  lastSessionDetection = null;
+  renderSessionToken(null);
 
   // TLS/cert check runs first and by default as part of every scan. It reloads
   // the tab and briefly shows Chrome's "being debugged" banner (chrome.debugger +
@@ -660,6 +754,8 @@ async function run() {
 
   const headerFindings = data.record ? checkHeaders(data.record.headers, data.isHttps) : [{ level: "warn", title: "No response captured", observed: "Click Scan again." }];
   const cookieFindings = mergeCookieFindings(data.cookies, data.isHttps);
+  lastSessionDetection = detectSessionCookie(data.cookies);
+  renderSessionToken(lastSessionDetection);
   const pageFindings = data.pageSignals ? pageChecksToFindings(data.pageSignals, data.isHttps) : [{ level: "info", title: "Page-level checks", observed: "Could not run on this tab (restricted page)." }];
 
   const origin = new URL(tab.url).origin;
